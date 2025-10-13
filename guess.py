@@ -1,4 +1,5 @@
 from queue import PriorityQueue
+from intel import load_keywords, match_prefix
 
 # 导入测试数据
 # 后续猜测出的密码会与该字典比对，若匹配则累加其出现次数（统计猜对的总数量）
@@ -26,7 +27,7 @@ def threhold(m, n):
 
 class Guess():
 
-    def __init__(self, base, start_symbol, order, testpd):
+    def __init__(self, base, start_symbol, order, testpd, keywords=None):
 
         self.base = base
         self.start_symbol = start_symbol
@@ -36,15 +37,17 @@ class Guess():
         self.true_guess = 0  # 猜测正确的次数
         self.flag = 1
         self.testpd = testpd
+        self.keywords = keywords or []
 
     # 初始化队列。从起始符号开始，生成初始的密码前缀序列，放入优先队列
     def initqueue(self, thre):
+        # 原有马尔可夫初始化
         start = self.start_symbol
         bs = list(self.base[start])
         for b in bs: # b[0] 为字符，b[1] 为概率
             if b[0] == '\n':
                 continue
-            qobject = [None] * 3 # 序列的最后 order 个字符（作为下一次扩展的 “前缀”）
+            qobject = [None] * 3 # object长度为3
             qobject[1] = start + b[0] # 当前序列（起始符号 + 字符）
             qobject[0] = -1 * b[1] # 概率取负值，保证优先队列中概率大的在前面，因为python是最小堆
 
@@ -53,6 +56,16 @@ class Guess():
 
             qobject[2] = qobject[1][-self.order:]
             self.queue.put(qobject) # 符合条件的加入队列
+
+        # 新增：情报关键词作为高优先级种子
+        for kw in self.keywords:
+            seq = start + kw
+            qobject = [None] * 3
+            # 赋予极高优先级（概率）
+            qobject[0] = -0.5
+            qobject[1] = seq
+            qobject[2] = seq[-self.order:]
+            self.queue.put(qobject)
 
     # 密码生成和验证
     # 循环从队列中取出高概率序列，扩展生成新序列；若遇到密码结束标记，则生成完整密码并验证，统计结果。
@@ -94,6 +107,20 @@ class Guess():
 
                 newobject[2] = newobject[1][-self.order:] # 用于下次拓展
                 self.queue.put(newobject)
+
+        # 检查是否可强制扩展为情报关键词
+        prefix = qobject[1][self.order:]
+        matches = match_prefix(prefix, self.keywords)
+        if matches:
+            for kw in matches:
+                # 直接扩展为完整关键词
+                new_seq = self.start_symbol + kw
+                newobject = [None] * 3
+                newobject[0] = -0.5  # 高优先级
+                newobject[1] = new_seq
+                newobject[2] = new_seq[-self.order:]
+                self.queue.put(newobject)
+            return
 
 
 

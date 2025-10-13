@@ -2,6 +2,7 @@ from train import *
 from guess import *
 import argparse
 import os
+from intel import load_keywords
 
 def main():
     parser = argparse.ArgumentParser(description="Markov-based Password Cracking")
@@ -9,6 +10,7 @@ def main():
     parser.add_argument('--number', type=int, default=2000000, help='the total of train and test simpled from password file')
     parser.add_argument('--seed', type=int, default=2, help='random seed')
     parser.add_argument('--order', type=int, default=3, help='')
+    parser.add_argument('--intel_path', type=str, default='data/keywords.txt', help='path to keywords file')
     opt = parser.parse_args()
 
     start_symbol = '#' * opt.order
@@ -25,7 +27,9 @@ def main():
     testpd = testpass('data/testword.txt')
     with open(path.format(opt.order, opt.order), 'rb') as file:
         base = pickle.load(file)
-    guesser = Guess(base, start_symbol, opt.order, testpd)
+    # 加载情报关键词
+    keywords = load_keywords(opt.intel_path)
+    guesser = Guess(base, start_symbol, opt.order, testpd, keywords)
 
     n = opt.number / 2
     m = 100000
