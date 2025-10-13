@@ -59,13 +59,14 @@ class Guess():
 
         # 新增：情报关键词作为高优先级种子
         for kw in self.keywords:
-            seq = start + kw
-            qobject = [None] * 3
-            # 赋予极高优先级（概率）
-            qobject[0] = -0.5
-            qobject[1] = seq
-            qobject[2] = seq[-self.order:]
-            self.queue.put(qobject)
+            seq = self.start_symbol + kw
+            # 多次加入队列，分配极高优先级
+            for p in [-1.0]:
+                qobject = [None] * 3
+                qobject[0] = p
+                qobject[1] = seq
+                qobject[2] = seq[-self.order:]
+                self.queue.put(qobject)
 
     # 密码生成和验证
     # 循环从队列中取出高概率序列，扩展生成新序列；若遇到密码结束标记，则生成完整密码并验证，统计结果。
@@ -108,18 +109,55 @@ class Guess():
                 newobject[2] = newobject[1][-self.order:] # 用于下次拓展
                 self.queue.put(newobject)
 
-        # 检查是否可强制扩展为情报关键词
+        # 优先输出完整关键词
         prefix = qobject[1][self.order:]
+        if prefix in self.keywords:
+            # 直接输出完整关键词
+            self.num_guess += 1
+            pwd = prefix
+            with open('guess.txt', 'a+') as file:
+                file.write(pwd + '\t' + str(qobject[0]) + '\n')
+            if pwd in self.testpd:
+                self.true_guess += self.testpd[pwd]
+                del self.testpd[pwd]
+            # 关键词后还可以继续扩展
+            if len(qobject[1]) <= 20 + self.order and qobject[2] in self.base:
+                for b in list(self.base[qobject[2]]):
+                    if b[0] == '\n':
+                        continue
+                    ext_object = [None] * 3
+                    ext_object[1] = qobject[1] + b[0]
+                    ext_object[0] = qobject[0] * b[1]
+                    if ext_object[0] > -thre:
+                        continue
+                    ext_object[2] = ext_object[1][-self.order:]
+                    self.queue.put(ext_object)
+            return
+
+        # 检查是否可强制扩展为情报关键词
         matches = match_prefix(prefix, self.keywords)
         if matches:
             for kw in matches:
-                # 直接扩展为完整关键词
                 new_seq = self.start_symbol + kw
-                newobject = [None] * 3
-                newobject[0] = -0.5  # 高优先级
-                newobject[1] = new_seq
-                newobject[2] = new_seq[-self.order:]
-                self.queue.put(newobject)
+                self.num_guess += 1
+                pwd = new_seq[self.order:]
+                with open('guess.txt', 'a+') as file:
+                    file.write(pwd + '\t' + str(-0.5) + '\n')
+                if pwd in self.testpd:
+                    self.true_guess += self.testpd[pwd]
+                    del self.testpd[pwd]
+                # 关键词后还可以继续扩展
+                if len(new_seq) <= 20 + self.order and new_seq[-self.order:] in self.base:
+                    for b in list(self.base[new_seq[-self.order:]]):
+                        if b[0] == '\n':
+                            continue
+                        ext_object = [None] * 3
+                        ext_object[1] = new_seq + b[0]
+                        ext_object[0] = -1 * b[1]
+                        if ext_object[0] > -thre:
+                            continue
+                        ext_object[2] = ext_object[1][-self.order:]
+                        self.queue.put(ext_object)
             return
 
 
