@@ -65,25 +65,25 @@ def statistic(passwd, order):
     '''
     输入 ：上一步的密码频数字典、模型阶数order
     输出 ：base : 统计“前缀 - 后续字符” 的出现次数
-    假设 base = 2， 则 base 可能是这样的：{ "^": { "1": 500, "p": 300 }, "1": { "2": 480 }, ... }
+    假设 order = 1， 则 base 可能是这样的：{ "^": { "1": 500, "p": 300 }, "1": { "2": 480 }, ... }
 
     '''
 
     base = {}
-    for key, value in passwd.items():
+    for key, value in passwd.items(): # key 是密码， value 是该密码的出现次数
 
         l = len(key)
-        for ord in range(order, order+1):
+        for ord in range(order, order+1): # ord == order
             for i in range(l-ord):
-                ps = key[i:i+ord]
-                qs = key[i+ord]
+                ps = key[i:i+ord] # 前缀
+                qs = key[i+ord] # 后续字符
 
-                if ps in base:
-                    if qs in base[ps]:
+                if ps in base: # 前缀已存在
+                    if qs in base[ps]: # 后续字符已存在，频数继续累加
                         base[ps][qs] += value
                     else:
                         base[ps].setdefault(qs, value)
-                else:
+                else: # 前缀不存在，新增前缀和后续字符
                     base.setdefault(ps, {})
                     base[ps].setdefault(qs, value)
     return base
@@ -96,12 +96,12 @@ def laplace(base, order, seed, number):
     '''
 
     for key, value in base.items():
-        num = sum(value.values())
+        num = sum(value.values()) # 该前缀的总频数
         for k, v in value.items():
             base[key][k] = (v * 1.0 + 0.01) / (num + 0.96) # 拉普拉斯平滑 ： 概率 = (频数 + 0.01) / (该前缀的总频数 + 0.96)
 
-    for key, value in base.items(): # 概率排序
-        base[key] = sorted(value.items(), key=lambda t: t[1], reverse=True)
+    for key, value in base.items(): # 
+        base[key] = sorted(value.items(), key=lambda t: t[1], reverse=True) # 降序排序，快速获取某个前缀后出现频率最高的字符
 
     # 保存模型
     with open('./order{}/order{}_{}_{}.pickle'.format(order, order, seed, number), 'wb') as file:
