@@ -1,4 +1,5 @@
-from queue import PriorityQueue
+from queue import PriorityQueue # 优先队列
+from sortedcontainers import SortedList # 代替优先队列
 from intel import load_keywords, match_prefix
 import time
 import resource
@@ -41,6 +42,8 @@ class Guess():
         self.testpd = testpd
         self.keywords = keywords or []
         self.processed_kw = set()  # 记录已处理的关键词避免重复
+
+        self.max_queue_size = 20000  # 队列最大容量
         self.start_time = time.time()
         self.max_runtime = 3600  # 最大运行时间（秒），如1小时
         self.max_memory_mb = 2048  # 最大内存占用（MB）
@@ -109,16 +112,16 @@ class Guess():
         # 提取当前有效密码（去除起始符号）
         current_pwd = current_seq[self.order:]
 
-        # 2. 若当前序列包含完整关键词，直接输出并标记已处理
+        # 2. 若当前序列包含完整关键词，直接输出
         for kw in self.keywords:
             if kw in current_pwd and kw not in self.processed_kw:
                 self.num_guess += 1
-                with open('guess.txt', 'w') as f:
+                with open('guess.txt', 'a+') as f:
                     f.write(f"{current_pwd}\t{abs(current_prob)}\n")
                 if current_pwd in self.testpd:
                     self.true_guess += self.testpd[current_pwd]
                     del self.testpd[current_pwd]
-                self.processed_kw.add(kw)
+                self.processed_kw.add(kw) # 标记已处理
                 return
         
         # 3. 防止生成过长的密码
@@ -148,7 +151,7 @@ class Guess():
                     if len(current_seq) > 3 + self.order: # 需要长度足够
                         self.num_guess += 1
                         pwd = current_pwd # 去掉起始符号，输出的密码
-                        with open('guess.txt', 'w') as file: # 记录猜测
+                        with open('guess.txt', 'a+') as file: # 记录猜测
                             file.write(pwd+ '\t' + str(abs(current_prob)) + '\n')
                         if pwd in self.testpd: # 验证
                             self.true_guess += self.testpd[pwd]
