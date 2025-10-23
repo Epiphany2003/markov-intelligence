@@ -7,7 +7,7 @@ from intel import load_keywords
 def main():
     # # 每次运行开始时清空guess.txt文件
     with open('guess.txt', 'w') as f:
-    pass
+        pass
 
     parser = argparse.ArgumentParser(description="Markov-based Password Cracking")
     parser.add_argument('--path', type=str, default='data/rockyou.txt', help='the path of password file')
