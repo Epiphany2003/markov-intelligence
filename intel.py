@@ -13,10 +13,10 @@ def load_keywords(path):
 
 def match_prefix(seq, keywords):
     """
-    检查seq是否为某个关键词的前缀，返回所有匹配的关键词列表。
+    检查seq是否为某个关键词的前缀或子串，返回所有匹配的关键词列表。
     """
     matches = []
     for kw in keywords:
-        if kw.startswith(seq) and len(seq) < len(kw): # kw是否以seq开头且比seq长
+        if seq in kw and len(seq) < len(kw):  # 检查seq是否为kw的子串
             matches.append(kw)
     return matches
