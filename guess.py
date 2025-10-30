@@ -101,11 +101,11 @@ class Guess():
             return
 
         # 检查内存占用（Linux系统）
-        mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # MB
-        if mem_usage > self.max_memory_mb:
-            print(f"内存占用超过{self.max_memory_mb}MB，主动退出")
-            self.flag = 0
-            return
+        # mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # MB
+        # if mem_usage > self.max_memory_mb:
+        #     print(f"内存占用超过{self.max_memory_mb}MB，主动退出")
+        #     self.flag = 0
+        #     return
 
         # 终止条件：队列空或总猜测次数超过 100 万
         if len(self.queue) == 0 or self.num_guess > 1000000:
