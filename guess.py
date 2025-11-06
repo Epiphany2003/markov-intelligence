@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 from sortedcontainers import SortedList  # 替换 PriorityQueue
+=======
+from queue import PriorityQueue
+>>>>>>> parent of dc66c74 (添加关键词后的新增问题)
 from intel import load_keywords, match_prefix
 import time
 import resource
@@ -41,8 +45,6 @@ class Guess():
         self.testpd = testpd
         self.keywords = keywords or []
         self.processed_kw = set()  # 记录已处理的关键词避免重复
-
-        self.max_queue_size = 20000  # 队列最大容量
         self.start_time = time.time()
         self.max_runtime = 3600  # 最大运行时间（秒），如1小时
         self.max_memory_mb = 2048  # 最大内存占用（MB）
@@ -123,23 +125,21 @@ class Guess():
         # 提取当前有效密码（去除起始符号）
         current_pwd = current_seq[self.order:]
 
-        # 2. 若当前序列包含完整关键词，直接输出；去重 + 限制变体
+        # 2. 若当前序列包含完整关键词，直接输出并标记已处理
         for kw in self.keywords:
             # 去重检查
             if current_pwd in self.guessed_pwds:
                 continue
             if kw in current_pwd and kw not in self.processed_kw:
                 self.num_guess += 1
-                with open('guess.txt', 'a+') as f:
-                    f.write(f"{current_pwd}\t{current_prob}\n")
-                self.guessed_pwds.add(current_pwd)  # 记录已生成
-
+                with open('guess.txt', 'w') as f:
+                    f.write(f"{current_pwd}\t{abs(current_prob)}\n")
                 if current_pwd in self.testpd:
                     hit_count = self.testpd[current_pwd] # 验证集中命中的个数
                     self.true_guess += hit_count
                     self.keyword_true_guess += hit_count # 关键词命中
                     del self.testpd[current_pwd]
-                self.processed_kw.add(kw)  # 标记已处理
+                self.processed_kw.add(kw)
                 return
         
         # 3. 防止生成过长的密码
@@ -182,14 +182,8 @@ class Guess():
                 if b[0] == '\n': # 输出密码
                     if len(current_seq) > 3 + self.order: # 需要长度足够
                         pwd = current_pwd # 去掉起始符号，输出的密码
-                        # 去重检查  
-                        if pwd in self.guessed_pwds:
-                            continue
-                        self.num_guess += 1
-                        with open('guess.txt', 'a+') as file: # 记录猜测
-                            file.write(pwd+ '\t' + str(current_prob) + '\n')
-                        self.guessed_pwds.add(pwd)  # 记录已生成
-
+                        with open('guess.txt', 'w') as file: # 记录猜测
+                            file.write(pwd+ '\t' + str(abs(current_prob)) + '\n')
                         if pwd in self.testpd: # 验证
                             hit_count = self.testpd[pwd]
                             self.true_guess += hit_count
