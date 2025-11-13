@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 from sortedcontainers import SortedList  # 替换 PriorityQueue
-=======
-from queue import PriorityQueue
->>>>>>> parent of dc66c74 (添加关键词后的新增问题)
 from intel import load_keywords, match_prefix
 import time
 import resource
@@ -49,25 +45,32 @@ class Guess():
         self.max_runtime = 3600  # 最大运行时间（秒），如1小时
         self.max_memory_mb = 2048  # 最大内存占用（MB）
 
-        # 动态调整优先级 的相关参数
-        self.keyword_hit_ratio_threshold = 0.6  # 关键词贡献饱和阈值
-        self.keyword_true_guess = 0  # 关键词相关的命中数
-        self.keyword_priority = 1000.0  # 初始关键词优先级
-        self.guessed_pwds = set()  # 记录已生成的密码，用于去重
-        self.max_keyword_variants = 500  # 每个关键词的最大变体生成数
-        self.keyword_variant_counts = {kw: 0 for kw in (keywords or [])}  # 变体计数
+        # 队列控制参数
+        self.max_queue_size = 100000
+
+        # 记录已经生成的密码，防止重复生成
+        self.guessed_pwds = set()
+        
+        # 关键词优先级动态调整相关参数
+        self.keyword_initial_priority = 1000.0  # 初始优先级
+        self.keyword_priorities = {kw: self.keyword_initial_priority for kw in self.keywords}  # 每个关键词单独的优先级
+        self.keyword_isvalid = {kw: True for kw in self.keywords} # 关键词是否有效
+        self.true_guess_no_growth_threshold = 200  # 连续10次猜测无新增true_guess触发优化
+        self.consecutive_no_growth = 0  # 连续无true_guess增长的猜测次数
+        self.priority_decay = 0  # 优先级衰减系数，直接衰减到0
+        self.consecutive_no_growth = 0  # 连续无true_guess增长的猜测次数
 
     # 初始化队列。从起始符号开始，生成初始的密码前缀序列，放入优先队列
-    def initqueue(self, thre):
+    def initqueue(self, thre = 0):
         ''' 加入关键词(可选) '''
         for kw in self.keywords:
-            if not kw:
+            if not kw or not self.keyword_isvalid[kw]:
                 continue
             # 构建带起始符号的序列
             seq = self.start_symbol + kw
             
             qobject = [
-                1000.0 / len(kw),  # 使用极高优先级（根据关键词长度加权）
+                self.keyword_priorities[kw] / len(kw),  # 使用极高优先级（根据关键词长度加权）
                 seq,
                 seq[-self.order:]  # 用于扩展的前缀
             ]
@@ -92,25 +95,13 @@ class Guess():
     # 密码生成和验证
     # 循环从队列中取出高概率序列，扩展生成新序列；若遇到密码结束标记，则生成完整密码并验证，统计结果。
     def insertqueue(self, thre):
+
         # 移除队尾元素以控制队列大小
         if len(self.queue) > self.max_queue_size:
             self.queue.pop()  # 弹出队尾元素（最低概率）
 
-        # 检查运行时间
-        if time.time() - self.start_time > self.max_runtime:
-            print("超过最大运行时间，主动退出")
-            self.flag = 0
-            return
-
-        # 检查内存占用（Linux系统）
-        mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # MB
-        if mem_usage > self.max_memory_mb:
-            print(f"内存占用超过{self.max_memory_mb}MB，主动退出")
-            self.flag = 0
-            return
-
         # 终止条件：队列空或总猜测次数超过 100 万
-        if len(self.queue) == 0 or self.num_guess > 1000000:
+        if len(self.queue) == 0 or self.num_guess > 500000:
             print("所有的可能的猜测已经输出")
             print("正确猜测:", self.true_guess)
             print("总猜测:", self.num_guess)
@@ -121,25 +112,40 @@ class Guess():
         current_seq = qobject[1]
         current_prob = qobject[0]
         current_prefix = qobject[2]
-
-        # 提取当前有效密码（去除起始符号）
-        current_pwd = current_seq[self.order:]
+        current_pwd = current_seq[self.order:] # 当前有效密码（去除起始符号部分）
 
         # 2. 若当前序列包含完整关键词，直接输出并标记已处理
         for kw in self.keywords:
             # 去重检查
             if current_pwd in self.guessed_pwds:
                 continue
+
             if kw in current_pwd and kw not in self.processed_kw:
+                if(self.keyword_isvalid[kw] == False):
+                    continue
+
                 self.num_guess += 1
-                with open('guess.txt', 'w') as f:
+
+                with open('guess.txt', 'a+') as f:
                     f.write(f"{current_pwd}\t{abs(current_prob)}\n")
+
+                hit_occurred = False # 检测是否命中
                 if current_pwd in self.testpd:
                     hit_count = self.testpd[current_pwd] # 验证集中命中的个数
+                    hit_occurred = True
                     self.true_guess += hit_count
-                    self.keyword_true_guess += hit_count # 关键词命中
                     del self.testpd[current_pwd]
                 self.processed_kw.add(kw)
+                self.guessed_pwds.add(current_pwd)  # 记录已生成的密码
+
+                # 更新连续无增长计数
+                if hit_occurred:
+                    self.consecutive_no_growth = 0  # 有增长，重置计数
+                    self.last_true_guess = self.true_guess  # 记录当前增长后的值
+                else:
+                    self.consecutive_no_growth += 1  # 无增长，计数+1
+
+                self.is_keywords_valid()
                 return
         
         # 3. 防止生成过长的密码
@@ -149,31 +155,32 @@ class Guess():
         # 4. 优先基于关键词扩展（如果当前前缀是关键词的一部分）
         matches = match_prefix(current_pwd, self.keywords) # matches ：所有匹配上的关键词
         if matches:
-            current_radio = self._get_keyword_hit_ratio() # 实时计算比例
-            for kw in matches:
-                # 检查变体是否超过上限
-                if self.keyword_variant_counts[kw] >= self.max_keyword_variants:
-                    continue
-                self.keyword_variant_counts[kw] += 1  # 累加变体计数
-                
+            # 过滤掉已无效的关键词
+            valid_matches = [kw for kw in matches if self.keyword_isvalid[kw]]
+            for kw in valid_matches:
+                # 计算当前密码与关键词的重叠部分，生成扩展序列
+                # 例如：current_pwd是"xyl"，kw是"love"，则重叠"l"，扩展后为"xylove"
+                overlap_len = 0
+                for i in range(1, min(len(current_pwd), len(kw)) + 1):
+                    if current_pwd.endswith(kw[:i]):
+                        overlap_len = i
+
+                # 生成包含关键词的新序列（current_pwd + 关键词的非重叠部分）
+                extended_pwd = current_pwd + kw[overlap_len:]
                 # 生成完整关键词序列
-                full_kw_seq = self.start_symbol + kw
+                full_kw_seq = self.start_symbol + extended_pwd
                 # 确保序列长度合法
                 if len(full_kw_seq) <= 20 + self.order:
-                    # 动态调整扩展关键词的优先级
-                    if current_radio < 0.4:
-                        ext_priority = 900.0 / len(full_kw_seq) # 高优先级
-                    elif current_radio < 0.6:
-                        ext_priority = 0.4 / len(full_kw_seq) # 低优先级
-                    else:
-                        ext_priority = 0
-
+                    ext_priority = self.keyword_priorities[kw] / len(kw)    
                     ext_object = [
-                        ext_priority, 
+                        ext_priority,
                         full_kw_seq,
                         full_kw_seq[-self.order:]
                     ]
-                    self.queue.add(ext_object)
+                    # 仅添加仍有有效优先级的关键词序列（优先级>0）
+                    if ext_priority > 0:
+                        self.queue.add(ext_object)
+
 
         # 普通序列拓展
         if current_prefix in self.base: # 前缀存在于base中
@@ -182,15 +189,24 @@ class Guess():
                 if b[0] == '\n': # 输出密码
                     if len(current_seq) > 3 + self.order: # 需要长度足够
                         pwd = current_pwd # 去掉起始符号，输出的密码
-                        with open('guess.txt', 'w') as file: # 记录猜测
+                        with open('guess.txt', 'a+') as file: # 记录猜测
                             file.write(pwd+ '\t' + str(abs(current_prob)) + '\n')
+                            self.num_guess += 1
+                            self.guessed_pwds.add(pwd)  # 记录已生成的密码，用于去重
+
+                        hit_occurred = False # 检测是否命中
                         if pwd in self.testpd: # 验证
                             hit_count = self.testpd[pwd]
                             self.true_guess += hit_count
-                            ''' 检测是否未关键词相关代码, 若包含关键词则累加关键词命中 '''
-                            if any(kw in pwd for kw in self.keywords):
-                                self.keyword_true_guess += hit_count
+                            hit_occurred = True
                             del self.testpd[pwd]
+
+                        # 更新连续无增长次数和历史记录
+                        if hit_occurred:
+                            self.consecutive_no_growth = 0  # 有增长，重置计数
+                        else:
+                            self.consecutive_no_growth += 1  # 无增长，计数+1
+
                     continue
 
                 # 非结束符处理
@@ -202,10 +218,38 @@ class Guess():
                 if newobject[0] >= thre:
                     self.queue.add(newobject)
 
-    def _get_keyword_hit_ratio(self):
-        if self.true_guess == 0:
-            return 0.0  # 总命中为0时返回0，避免除零
-        return self.keyword_true_guess / self.true_guess
+        self.is_keywords_valid()
+        # print("连续无增长次数：{}".format(self.consecutive_no_growth))
+        
+    def is_keywords_valid(self):
+        # 当连续多次无新增true_guess时，降低关键词优先级
+        if self.consecutive_no_growth >= self.true_guess_no_growth_threshold:
+            for kw in self.keywords:
+                if self.keyword_isvalid[kw]:
+                    # 直接将优先级衰减到0
+                    self.keyword_priorities[kw] = 0
+                    self.keyword_isvalid[kw] = False  # 标记为无效
+                    self._clean_invalid_keyword_sequences()
+            self.consecutive_no_growth = 0  # 重置计数
+
+    def _clean_invalid_keyword_sequences(self):
+        """清理队列中与已无效关键词相关的序列"""
+        invalid_kw = [kw for kw in self.keywords if not self.keyword_isvalid[kw]]
+        if not invalid_kw:
+            return  # 没有无效关键词，直接返回
+
+        # 过滤队列：移除包含任何无效关键词的序列
+        new_queue = []
+        for item in self.queue:
+            seq = item[1]
+            pwd = seq[self.order:]  # 提取有效密码部分
+            # 检查是否包含任何无效关键词
+            if any(kw in pwd for kw in invalid_kw):
+                continue  # 跳过包含无效关键词的序列
+            new_queue.append(item)
+
+        # 重建队列（保持排序）
+        self.queue = SortedList(new_queue, key=lambda x: -x[0])
 
 
 

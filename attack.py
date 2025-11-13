@@ -5,6 +5,8 @@ import os
 from intel import load_keywords
 
 def main():
+    with open('guess.txt', 'w') as f:
+        f.write('')  # 清空之前的猜测结果文件
     parser = argparse.ArgumentParser(description="Markov-based Password Cracking")
     parser.add_argument('--path', type=str, default='data/rockyou.txt', help='the path of password file')
     parser.add_argument('--number', type=int, default=2000000, help='the total of train and test simpled from password file')
@@ -33,8 +35,8 @@ def main():
 
     n = opt.number / 2
     m = 100000
-    thre = threhold(m,n)
-    guesser.initqueue(thre[0])
+    # thre = threhold(m,n)
+    guesser.initqueue()
 
     with open('order{}/memory.txt'.format(opt.order),'w+') as f:
         num = 0
@@ -42,11 +44,24 @@ def main():
         while guesser.flag:
 
             k = int(guesser.true_guess / m)
-            guesser.insertqueue(thre[k])
+            guesser.insertqueue(0)
             num += 1
             if num % 1000 == 0:
                 f.write(str(guesser.true_guess) + ' / ' + str(guesser.num_guess) + '\n')
                 print("GUESS: {} / {}".format(guesser.true_guess, guesser.num_guess))
+                # 打印所有关键词的有效性状态
+    
+                for kw, is_valid in guesser.keyword_isvalid.items():
+                    is_print = False
+                    if is_valid:
+                        is_print = True
+                        break
+                    
+                if is_print:
+                    print("keyword_isvalid:")
+                    for kw, is_valid in guesser.keyword_isvalid.items():
+                        if is_valid:
+                            print(f"{kw}: {is_valid}")
 
 if __name__ == "__main__":
 
